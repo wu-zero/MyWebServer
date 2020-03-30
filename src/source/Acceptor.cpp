@@ -9,32 +9,39 @@
 
 
 #include "Acceptor.h"
+
 #include <memory>
 #include <iostream>
+#include <unistd.h>
 
-Acceptor::Acceptor(int epollFd)
-    :mEpollFd(epollFd),
-    mListenFd(creatSocketAndListen()),
-    mPtrAcceptChannel(new Channel(epollFd))
+#include "socket_utils.h"
+#include "Channel.h"
+
+
+Acceptor::Acceptor(EventLoop *loop)
+    : mPtrLoop(loop),
+      mListenFd(-1),
+      mPtrAcceptChannel(nullptr),
+      mNewConnectionCallback(nullptr)
 {
-    mPtrAcceptChannel->setSocketFd(mListenFd);
-    if (mListenFd < 0){
-        std::cout << "creatSocketAndListen failed" << std::endl;
-        abort();
-    }
-    if (setSocketNonBlock(mListenFd) < 0)
-    {
-        perror("setSocketNonBlock failed");
-        abort();
-    }
 }
 
 Acceptor::~Acceptor()
 {
+    close(mListenFd);
+    mPtrAcceptChannel->disableAll();
+    mPtrAcceptChannel->remove(); //从Epoll中注销
 }
 
 void Acceptor::start()
 {
+    mListenFd = creatSocketAndListen();
+    if (mListenFd < 0){
+        std::cout << "creatSocketAndListen failed" << std::endl;
+        abort();
+    }
+
+    mPtrAcceptChannel = std::make_shared<Channel>(mPtrLoop, mListenFd);
     mPtrAcceptChannel->enableReading();
     mPtrAcceptChannel->setReadHandler(std::bind(&Acceptor::handleRead, this));
 }
@@ -43,13 +50,12 @@ void Acceptor::handleRead()
 {
     std::cout << "Acceptor::handleRead" << std::endl;
     int connFd = creatNewAccept(mListenFd);
-    setSocketNonBlock(connFd);
+    //setSocketNonBlock(connFd);
 
-    mNewConnectionCallback(connFd);
-}
-
-void Acceptor::handleWrite()
-{
+    // 执行新连接到来时的回调
+    if(mNewConnectionCallback){
+        mNewConnectionCallback(connFd);
+    }
 }
 
 void Acceptor::setNewConnectionCallback(const Acceptor::NewConnectionCallback &cb)

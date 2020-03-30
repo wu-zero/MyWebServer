@@ -1,45 +1,46 @@
 /// \file TcpServer.h
 ///
-/// Server的具体实现，epoll监听一个socket，
-/// 对于Client请求，用Acceptor建立新的socket连接，epoll中增加新的监听socket
+/// TcpServer的具体实现, 负责管理Acceptor和Connection, 前者负责建立连接, 后者负责每个连接
 ///
 /// \author wyw
 /// \version 1.0
 /// \date 2020/2/18.
 
 
-#ifndef MYWEBSERVER2_TCPSERVER_H
-#define MYWEBSERVER2_TCPSERVER_H
+#ifndef MYWEBSERVER_TCPSERVER_H
+#define MYWEBSERVER_TCPSERVER_H
 
 
-#include <sys/epoll.h>
 #include <map>
+#include <memory>
 
-
-#include "TcpConnection.h"
-#include "Acceptor.h"
+class Acceptor;
+class EventLoop;
+class TcpConnection;
+class IUser;
 
 
 class TcpServer{
 private:
-    enum{
-        MAX_EVENTS = 10,
-        MAX_LISTEN = 100,
-    };
     using SPtrAcceptor = std::shared_ptr<Acceptor>;
     using SPtrConnection = std::shared_ptr<TcpConnection>;
 private:
-    int mEpollFd; // epoll文件描述符
-    struct epoll_event mEvents[MAX_EVENTS]; // epoll_wait从内核得到事件的集合(临时文件)
-    std::map<int, SPtrConnection> mConnections; // 所有建立的连接
+    EventLoop *mEventLoop;
     SPtrAcceptor mPtrAcceptor; //处理新连接
-
+    std::map<int, SPtrConnection> mConnectionMap; // 所有建立的连接
+    IUser *mPtrIUser; // Connection的用户层
 public:
-    TcpServer();
+    explicit TcpServer(EventLoop *loop);
     ~TcpServer();
+    // TcpServer启动
     void start();
-    void newConnection(int sockfd); //新连接到来时的回调函数
+    //新连接到来时的回调函数, for Acceptor
+    void newConnection(int sockFd);
+    //连接断开时的回调函数, for Connection
+    void removeConnection(const SPtrConnection &connection);
+    //设置User接口
+    void setUser(IUser *ptrIUser);
 };
 
 
-#endif //MYWEBSERVER2_TCPSERVER_H
+#endif //MYWEBSERVER_TCPSERVER_H

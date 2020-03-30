@@ -8,14 +8,16 @@
 /// \date 2020/2/18.
 
 
-#ifndef MYWEBSERVER2_ACCEPTOR_H
-#define MYWEBSERVER2_ACCEPTOR_H
+#ifndef MYWEBSERVER_ACCEPTOR_H
+#define MYWEBSERVER_ACCEPTOR_H
 
 
-#include "Channel.h"
-#include "socket_utils.h"
 #include <memory>
+#include <functional>
 
+
+class EventLoop;
+class Channel;
 
 class Acceptor
 {
@@ -23,23 +25,23 @@ private:
     using SPtrChannel = std::shared_ptr<Channel>;
     using NewConnectionCallback = std::function<void(int newConnectFd)>;
 private:
-    int mEpollFd; // epoll文件描述符
+    EventLoop *mPtrLoop; // 所属EventLoop
     int mListenFd; // 服务器监听的socket的文件描述符
-    SPtrChannel mPtrAcceptChannel; // 观察 服务器监听的socket 的事件
+    SPtrChannel mPtrAcceptChannel; // 观察 服务器监听的socket 的Channel
+
     NewConnectionCallback mNewConnectionCallback;   // 新连接到来时的回调函数
 public:
-    explicit Acceptor(int epollFd);
+    explicit Acceptor(EventLoop *loop);
     ~Acceptor();
 
-    void start();
+    void start(); // 开始监听server地址
 
-    void handleRead();
-    void handleWrite();
-
+    // 用于上层(管理Acceptor的层)设置回调
     void setNewConnectionCallback(const NewConnectionCallback &cb); //设置新连接到来时的回调函数
-
-
+private:
+    // 用于Channel的回调
+    void handleRead();
 };
 
 
-#endif //MYWEBSERVER2_ACCEPTOR_H
+#endif //MYWEBSERVER_ACCEPTOR_H

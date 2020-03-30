@@ -1,24 +1,27 @@
 /// \file TcpServer.cpp
 ///
-/// Server的具体实现，epoll监听一个socket，
-/// 对于Client请求，用Acceptor建立新的socket连接，epoll中增加新的监听socket
+/// TcpServer的具体实现, 负责管理Acceptor和Connection, 前者负责建立连接, 后者负责每个连接
 ///
 /// \author wyw
 /// \version 1.0
 /// \date 2020/2/18.
 
-
-
-#include <iostream>
-#include <vector>
-
-#include "TcpConnection.h"
 #include "TcpServer.h"
 
+#include <assert.h>
 
-TcpServer::TcpServer()
-        : mEpollFd(-1),
-        mPtrAcceptor(nullptr)
+#include "TcpConnection.h"
+#include "EventLoop.h"
+#include "Acceptor.h"
+#include "IUser.h"
+
+
+
+TcpServer::TcpServer(EventLoop *loop)
+        : mEventLoop(loop),
+          mPtrAcceptor(nullptr),
+          mConnectionMap(),
+          mPtrIUser(nullptr)
 {
 }
 
@@ -26,42 +29,41 @@ TcpServer::~TcpServer()
 {
 }
 
-void TcpServer::newConnection(int sockfd)
-{
-    mConnections[sockfd] = std::make_shared<TcpConnection>(mEpollFd, sockfd);
-}
-
 void TcpServer::start()
 {
-    mEpollFd = epoll_create(MAX_LISTEN);
-    if (mEpollFd <= 0)
-        std::cout << "epoll_create error, errno:" << mEpollFd << std::endl;
-
-    mPtrAcceptor = std::make_shared<Acceptor>(mEpollFd);
+    // 创建Acceptor
+    mPtrAcceptor = std::make_shared<Acceptor>(mEventLoop);
+    // 设置Acceptor接到新连接时的回调
     mPtrAcceptor->setNewConnectionCallback(std::bind(&TcpServer::newConnection, this, std::placeholders::_1));
-    mPtrAcceptor->start();
-    for (;;)
-    {
-        std::vector<Channel *> channels;
-        int fds = epoll_wait(mEpollFd, mEvents, MAX_EVENTS, -1); //epoll_wait
-        if (fds == -1)
-        {
-            std::cout << "epoll_wait error, errno:" << errno << std::endl;
-            break;
-        }
-        for (int i = 0; i < fds; i++) //找出要回调的Channel
-        {
-            Channel *pChannel = static_cast<Channel *>(mEvents[i].data.ptr);
-            pChannel->setRevents(mEvents[i].events);
-            channels.push_back(pChannel);
-        }
 
-        std::vector<Channel *>::iterator it; //执行回调
-        for (it = channels.begin(); it != channels.end(); ++it)
-        {
-            (*it)->handleEvent();
-        }
-    }
+    // Acceptor开始
+    mPtrAcceptor->start();
 }
 
+void TcpServer::newConnection(int sockFd)
+{
+    // 创建新连接的相关内容
+    SPtrConnection newConnection = std::make_shared<TcpConnection>(mEventLoop, sockFd);
+    // 放到管理map中
+    mConnectionMap[sockFd] = newConnection;
+
+    //设置User
+    newConnection->setUser(mPtrIUser);
+    // 设置Connection关闭时的回调, Connection关闭时让TcpServer删除与它有关的内容
+    newConnection->setCloseCallback(std::bind(&TcpServer::removeConnection, this, std::placeholders::_1));
+
+    // 调用Connection建立连接时的相关函数
+    newConnection->start();
+}
+
+void TcpServer::removeConnection(const TcpServer::SPtrConnection &connection)
+{
+    size_t n = mConnectionMap.erase(connection->getSocketFd());
+    assert(n == 1);
+}
+
+void TcpServer::setUser(IUser *ptrIUser)
+{
+    mPtrIUser = ptrIUser;
+}
 

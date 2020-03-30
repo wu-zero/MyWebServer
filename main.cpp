@@ -1,5 +1,5 @@
 /// \file source.cpp
-/// \brief 
+/// \brief
 ///
 /// A_wrong detailed file description.
 ///
@@ -7,12 +7,14 @@
 /// \version 1.0
 /// \date 2020/3/7.
 
-#include "TcpServer.h"
+#include "MyServer.h"
 
 int main()
 {
-    TcpServer tcpServer;
-    tcpServer.start();
+    EventLoop loop;
+    MyServer myServer(&loop);
+    myServer.start();
+    loop.loop();
     return 0;
 }
 

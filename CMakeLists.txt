@@ -9,11 +9,10 @@ aux_source_directory(src/source dir_srcs )
 
 # 链接
 set(WORK ${dir_srcs})
-add_executable(MyWebServer ${WORK} main.cpp)
-
+add_executable(MyWebServer ${WORK} main.cpp MyServer.h MyServer.cpp)
 find_package (Threads)
 target_link_libraries (MyWebServer)
 
 
 # client
-add_executable(Client ${WORK} client.cpp)
+add_executable(Client ${WORK} MyClient.cpp)
