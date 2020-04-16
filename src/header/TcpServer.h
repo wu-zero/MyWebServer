@@ -11,35 +11,49 @@
 #define MYWEBSERVER_TCPSERVER_H
 
 
-#include <map>
 #include <memory>
+#include <unordered_map>
+#include <functional>
+#include "IHolder.h"
+#include "Buffer.h"
 
 class Acceptor;
 class EventLoop;
 class TcpConnection;
-class IUser;
-
+class IHolder;
 
 class TcpServer{
 private:
+    // 管理的Acceptor和TcpConnection
     using SPtrAcceptor = std::shared_ptr<Acceptor>;
     using SPtrConnection = std::shared_ptr<TcpConnection>;
+    // 用于TcpConnection的回调, 用户层面
+    using ConnectionCallback = std::function<void(const SPtrConnection &)>;
+    using MessageCallback = std::function<void(const SPtrConnection&, Buffer *)>;
+    using WriteCompleteCallback = std::function<void(const SPtrConnection&)>;
 private:
     EventLoop *mEventLoop;
-    SPtrAcceptor mPtrAcceptor; //处理新连接
-    std::map<int, SPtrConnection> mConnectionMap; // 所有建立的连接
-    IUser *mPtrIUser; // Connection的用户层
+    SPtrAcceptor mPtrAcceptor; // 处理新连接
+    std::unordered_map<int, SPtrConnection> mConnectionMap; // 所有建立的连接
+    // 用于TcpConnection的回调,  用户层面
+    ConnectionCallback mConnectionCallback;
+    MessageCallback mMessageCallback;
+    WriteCompleteCallback mWriteCompleteCallback;
 public:
     explicit TcpServer(EventLoop *loop);
     ~TcpServer();
-    // TcpServer启动
+    /// TcpServer启动
     void start();
-    //新连接到来时的回调函数, for Acceptor
+
+    /// 设置TcpConnection回调, 用户层面
+    void setConnectionCallback(const ConnectionCallback& cb);
+    void setMessageCallback(const MessageCallback& cb);
+    void setWriteCompleteCallback(const WriteCompleteCallback& cb);
+private:
+    /// 用于Acceptor的回调, Listen到结果执行该回调
     void newConnection(int sockFd);
-    //连接断开时的回调函数, for Connection
+    /// 用于TcpConnection的回调, TcpConnection连接断开时的回调函数, 删除TcpConnection;
     void removeConnection(const SPtrConnection &connection);
-    //设置User接口
-    void setUser(IUser *ptrIUser);
 };
 
 

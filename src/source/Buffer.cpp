@@ -40,11 +40,6 @@ void Buffer::append(const std::string &data)
     mBuff.append(data);
 }
 
-std::string Buffer::retrieveAllAsString()
-{
-    return retrieveAsString(readableBytes());
-}
-
 std::string Buffer::retrieveAsString(size_t len)
 {
     std::string result(peek(),len);
@@ -52,3 +47,7 @@ std::string Buffer::retrieveAsString(size_t len)
     return result;
 }
 
+std::string Buffer::retrieveAllAsString()
+{
+    return retrieveAsString(readableBytes());
+}

@@ -17,48 +17,73 @@
 
 class Channel;
 class EventLoop;
-class IUser;
+class IHolder;
+class Buffer;
 
-class TcpConnection
+class TcpConnection : public std::enable_shared_from_this<TcpConnection>
 {
+public:
+    // Tcp连接状态：连接、等待关闭(写完数据就关闭)、已关闭
+    enum TcpConnectionState{kStateConnected, kStateDisconnecting, kStateDisconnected};
 private:
     using SPtrChannel = std::shared_ptr<Channel>;
-    using CloseCallback = std::function<void(const std::shared_ptr<TcpConnection> &)>;
+    using SPtrTcpConnection = std::shared_ptr<TcpConnection>;
+
+    // TcpConnection删除时, TcpServer回调
+    using CloseCallback = std::function<void(const SPtrTcpConnection &)>;
+
+    // TcpConnection应用层持有者, HttpConnection
+    using WPtrIHolder = std::weak_ptr<IHolder>;
+    // TcpConnection应用层回调
+    using ConnectionCallback = std::function<void(const SPtrTcpConnection &)>;
+    using MessageCallback = std::function<void(const SPtrTcpConnection &, Buffer *)>;
+    using WriteCompleteCallback =  std::function<void(const SPtrTcpConnection&)>;
 private:
     EventLoop *mLoop; // 所属EventLoop
     int mSocketFd; // 负责连接的socket的文件描述符
-    SPtrChannel mPtrChannel; //观察 负责连接的socket的文件描述符 的Channel
+    SPtrChannel mPtrChannel; // 观察(负责连接的socket的文件描述符)的Channel
     Buffer mInBuffer; // 输入缓存
     Buffer mOutBuffer; // 输出缓存
-    IUser *mPtrUser; // 用户
+    TcpConnectionState mTcpConnectionState; // TcpConnection连接状态
 
+    // TcpConnection删除时, TcpServer回调
     CloseCallback mCloseCallback;
+
+    // TcpConnection应用层Holder和回调
+    WPtrIHolder mWPtrContext;
+    ConnectionCallback mConnectionCallback;
+    MessageCallback mMessageCallback;
+    WriteCompleteCallback mWriteCompleteCallback;
 public:
     TcpConnection(EventLoop *eventLoop, int socketFd);
     ~TcpConnection();
+    /// TcpConnection对应的SocketFd
+    int getSocketFd() const;
+    /// TcpConnection连接状态
+    void setState(TcpConnectionState state);
+    TcpConnectionState getState();
+    /// TcpConnection的开始、shutdown和关闭
+    void start(); // 建立连接时的操作：Channel、http
+    void shutdown();
+    void close();
 
-    int getSocketFd() const{
-        return mSocketFd;
-    }
+    /// TcpConnection删除时, TcpServer回调
+    void setCloseCallback(const CloseCallback &cb);
 
-    void start(); // 建立连接时的操作：Channel、用户
-
+    /// 设置TcpConnection应用层持有者
+    void setHolder(WPtrIHolder wPtrIHolder);
+    WPtrIHolder getHolder();
+    /// TcpConnection应用层Holder和回调
+    void setConnectionCallback(const ConnectionCallback &cb);
+    void setMessageCallback(const MessageCallback &cb);
+    void setWriteCompleteCallback(const WriteCompleteCallback &cb);
+    /// TcpConnection应用层发送消息
     void send(const std::string &message);
-
-    // 用于上层(管理TcpConnection的层)设置回调
-    void setCloseCallback(const CloseCallback& cb);
-    // 设置用户
-    void setUser(IUser *ptrUser);
 private:
-    // 用于Channel的回调
+    /// 用于Channel的回调
     void handleRead();
     void handleWrite();
     void handleClose();
-
-    // 执行完相关操作的用户回调
-    void userConnectCallback();
-    void userReadCallback(Buffer *pBuf);
-    void userWriteCallback();
 };
 
 

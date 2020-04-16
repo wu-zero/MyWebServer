@@ -10,11 +10,12 @@
 
 #include "Acceptor.h"
 
+#include <string.h>
 #include <memory>
 #include <iostream>
 #include <unistd.h>
 
-#include "socket_utils.h"
+#include "SocketUtils.h"
 #include "Channel.h"
 
 
@@ -24,38 +25,27 @@ Acceptor::Acceptor(EventLoop *loop)
       mPtrAcceptChannel(nullptr),
       mNewConnectionCallback(nullptr)
 {
-}
-
-Acceptor::~Acceptor()
-{
-    close(mListenFd);
-    mPtrAcceptChannel->disableAll();
-    mPtrAcceptChannel->remove(); //从Epoll中注销
-}
-
-void Acceptor::start()
-{
-    mListenFd = creatSocketAndListen();
+    mListenFd = SocketUtils::creatSocketAndListen(55555);
     if (mListenFd < 0){
         std::cout << "creatSocketAndListen failed" << std::endl;
         abort();
     }
-
     mPtrAcceptChannel = std::make_shared<Channel>(mPtrLoop, mListenFd);
-    mPtrAcceptChannel->enableReading();
+    // 设置自己Channel的回调
     mPtrAcceptChannel->setReadHandler(std::bind(&Acceptor::handleRead, this));
 }
 
-void Acceptor::handleRead()
+Acceptor::~Acceptor()
 {
-    std::cout << "Acceptor::handleRead" << std::endl;
-    int connFd = creatNewAccept(mListenFd);
-    //setSocketNonBlock(connFd);
+    mPtrAcceptChannel->disableAll(); // 关闭监听
+    mPtrAcceptChannel->remove(); // 从Epoll中删除
+    close(mListenFd);
+}
 
-    // 执行新连接到来时的回调
-    if(mNewConnectionCallback){
-        mNewConnectionCallback(connFd);
-    }
+void Acceptor::start()
+{
+    std::cout << "Acceptor::start()" << std::endl;
+    mPtrAcceptChannel->enableReading();
 }
 
 void Acceptor::setNewConnectionCallback(const Acceptor::NewConnectionCallback &cb)
@@ -63,7 +53,24 @@ void Acceptor::setNewConnectionCallback(const Acceptor::NewConnectionCallback &c
     mNewConnectionCallback = cb;
 }
 
+void Acceptor::handleRead()
+{
+    std::cout << "Acceptor::handleRead()" << std::endl;
+    int connFd = SocketUtils::creatNewAccept(mListenFd);
+    if (connFd > 0){
+        // 执行新连接到来时的回调
+        if(mNewConnectionCallback){
+            mNewConnectionCallback(connFd);
+        }
+        else{
+            close(connFd);
+        }
+    }
+    else{
+        std::cout << "Acceptor::handleRead() err , with msg is:" << strerror(errno) << std::endl;
+    }
 
+}
 
 
 

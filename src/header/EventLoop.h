@@ -14,8 +14,11 @@
 #include <functional>
 #include <vector>
 
+#include "Timer.h"
+
 class Channel;
 class Epoll;
+class TimerManager;
 
 
 // EventLoop 的主要功能是运行事件循环 EventLoop::loop()
@@ -23,6 +26,7 @@ class EventLoop
 {
 private:
     using SPtrEpoll = std::shared_ptr<Epoll>;
+    using SPtrTimerManager = std::shared_ptr<TimerManager>;
     using SptrChannel = std::shared_ptr<Channel>;
     using Functor = std::function<void()>; // pending functor 的类型
 private:
@@ -31,6 +35,7 @@ private:
     int mWakeUpEventFd; // 用于唤醒 IO 线程的文件描述符
     SptrChannel mWakeUpChannel; // 用于唤醒 IO 线程的文件描述符对应的Channel
     std::vector<Functor> mPendingFunctors; // 需要在 IO 线程执行的"任务"（函数）
+    SPtrTimerManager mTimerManager;
 public:
     EventLoop();
     ~EventLoop();

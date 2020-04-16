@@ -19,12 +19,18 @@ private:
 public:
     Buffer();
     ~Buffer();
-    const char* peek(); // 获取可读区域的起始地址
-    int readableBytes(); // 可取数据的大小
-    void retrieve(int len); // 缓冲区可读区容量减少 len
-    void append(const std::string &data); // 添加字符串数据到可读区
-    std::string retrieveAllAsString(); // 将可读区域容量减少到 0，并读出该部分的数据。
-    std::string retrieveAsString(size_t len); // 缓冲区可读区容量减少 len，并读出该部分的数据。
+    /// 获取可取区域的起始地址
+    const char* peek();
+    /// 可取数据的大小
+    int readableBytes();
+    /// 缓冲区可取数据减少 len
+    void retrieve(int len);
+    /// 添加字符串数据到可取区
+    void append(const std::string &data);
+    /// 缓冲区可读区容量减少 len，并返回该部分的数据
+    std::string retrieveAsString(size_t len);
+    /// 将可读区域容量减少到 0，并返回该部分的数据
+    std::string retrieveAllAsString();
 };
 
 

@@ -1,7 +1,7 @@
 ///// \file client.cpp
 ///// \brief
 /////
-///// ClassB detailed file description.
+///// Tcp客户端测试
 /////
 ///// \author wyw
 ///// \version 1.0
@@ -19,7 +19,7 @@
 #include <cstring>
 #include <arpa/inet.h>
 
-#include "socket_utils.h"
+#include "SocketUtils.h"
 
 const int PORT = 55555;
 
@@ -70,7 +70,7 @@ int main()
             std::cin.get(Message, 20);
 
             strcpy(buff, Message);
-            int n = writen(connectFd, buff, strlen(buff));//将数据发送给服务器端
+            int n = SocketUtils::writen(connectFd, buff, strlen(buff));//将数据发送给服务器端
             printf("Send %d byte to Server\n", n);
         } else if (mod == 2)
         {

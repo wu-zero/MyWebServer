@@ -1,11 +1,10 @@
-/// \file source.cpp
-/// \brief
+/// \file websource.cpp
 ///
-/// A_wrong detailed file description.
+/// 主函数
 ///
 /// \author wyw
 /// \version 1.0
-/// \date 2020/3/7.
+/// \date 2020/4/15.
 
 #include "MyServer.h"
 
@@ -17,5 +16,3 @@ int main()
     loop.loop();
     return 0;
 }
-
-

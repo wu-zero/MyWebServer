@@ -11,10 +11,8 @@
 #ifndef MYWEBSERVER_ACCEPTOR_H
 #define MYWEBSERVER_ACCEPTOR_H
 
-
 #include <memory>
 #include <functional>
-
 
 class EventLoop;
 class Channel;
@@ -26,20 +24,19 @@ private:
     using NewConnectionCallback = std::function<void(int newConnectFd)>;
 private:
     EventLoop *mPtrLoop; // 所属EventLoop
-    int mListenFd; // 服务器监听的socket的文件描述符
-    SPtrChannel mPtrAcceptChannel; // 观察 服务器监听的socket 的Channel
+    int mListenFd; // (服务器监听的socket)的文件描述符
+    SPtrChannel mPtrAcceptChannel; // 观察(服务器监听的socket)的Channel
 
-    NewConnectionCallback mNewConnectionCallback;   // 新连接到来时的回调函数
+    NewConnectionCallback mNewConnectionCallback; // 新连接到来时的回调函数
 public:
     explicit Acceptor(EventLoop *loop);
     ~Acceptor();
-
-    void start(); // 开始监听server地址
-
-    // 用于上层(管理Acceptor的层)设置回调
-    void setNewConnectionCallback(const NewConnectionCallback &cb); //设置新连接到来时的回调函数
+    /// 开始监听server
+    void start();
+    /// 用于上层(管理Acceptor的层)，设置新连接到来时的回调函数
+    void setNewConnectionCallback(const NewConnectionCallback &cb);
 private:
-    // 用于Channel的回调
+    /// 用于Channel的回调
     void handleRead();
 };
 

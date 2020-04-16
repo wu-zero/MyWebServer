@@ -23,16 +23,17 @@ class Channel;
 class Epoll
 {
 private:
-    using ChannelList = std::vector<Channel *>; // Channel列表
+    //using SPtrChannel = std::shared_ptr<Channel>;
+    using ChannelVector = std::vector<Channel *>; // Channel列表
 private:
     int mEpollFd; // epoll 文件描述符
     static const int kMaxEventListSize = 16;
-    struct epoll_event mEvents[kMaxEventListSize];
+    struct epoll_event mEvents[kMaxEventListSize]{};
 public:
     Epoll();
     ~Epoll();
 
-    void poll(ChannelList *ptrChannels); // 监听文件描述符
+    void poll(ChannelVector &channelVector); // 监听文件描述符
 
     void updateChannel(Channel *channel); // 添加监听
     void removeChannel(Channel *channel); // 删除监听

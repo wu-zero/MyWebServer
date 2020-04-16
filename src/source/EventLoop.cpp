@@ -15,13 +15,15 @@
 
 #include "Epoll.h"
 #include "Channel.h"
+#include "Timer.h"
 
 EventLoop::EventLoop()
         : mIsQuit(false),
           mEpoll(new Epoll()),
           mWakeUpEventFd(createEventFd()),
           mWakeUpChannel(new Channel(this, mWakeUpEventFd)),
-          mPendingFunctors()
+          mPendingFunctors(),
+          mTimerManager(new TimerManager(this))
 {
     mWakeUpChannel->setReadHandler(std::bind(&EventLoop::handleRead, this));
     mWakeUpChannel->enableReading();
@@ -38,7 +40,7 @@ void EventLoop::loop()
     while (!mIsQuit)
     {
         std::vector<Channel *> retChannels;
-        mEpoll->poll(&retChannels);
+        mEpoll->poll(retChannels);
         std::vector<Channel *>::iterator it;
         for (it = retChannels.begin(); it != retChannels.end(); ++it)
         {
@@ -104,3 +106,5 @@ int EventLoop::createEventFd()
     }
     return eventFd;
 }
+
+

@@ -9,14 +9,15 @@
 
 #include "TcpConnection.h"
 
-#include "socket_utils.h"
+#include "SocketUtils.h"
 #include <iostream>
 #include <cstring>
-#include <unistd.h>
+#include <utility>
 
 #include "Channel.h"
-#include "IUser.h"
 #include "EventLoop.h"
+
+const int READ_BUFF_MAX = 65536;
 
 TcpConnection::TcpConnection(EventLoop *eventLoop, int socketFd)
         : mLoop(eventLoop),
@@ -24,10 +25,15 @@ TcpConnection::TcpConnection(EventLoop *eventLoop, int socketFd)
           mPtrChannel(nullptr),
           mOutBuffer(),
           mInBuffer(),
+          mTcpConnectionState(kStateConnected),
           mCloseCallback(),
-          mPtrUser(nullptr)
+          mWPtrContext(),
+          mConnectionCallback(),
+          mMessageCallback(),
+          mWriteCompleteCallback()
 {
     mPtrChannel = std::make_shared<Channel>(eventLoop, socketFd);
+    // 设置自己Channel的回调
     mPtrChannel->setReadHandler(std::bind(&TcpConnection::handleRead, this));
     mPtrChannel->setWriteHandler(std::bind(&TcpConnection::handleWrite, this));
     mPtrChannel->setCloseHandler(std::bind(&TcpConnection::handleClose, this));
@@ -35,38 +41,30 @@ TcpConnection::TcpConnection(EventLoop *eventLoop, int socketFd)
 
 TcpConnection::~TcpConnection()
 {
-   // 资源释放在handleClose()里
+    std::cout << "TcpConnection::~TcpConnection()" <<std::endl;
+    // 关闭socket
+    SocketUtils::close(mSocketFd);
 }
 
 void TcpConnection::start()
 {
     mPtrChannel->enableReading();
-    userConnectCallback();
 }
 
-void TcpConnection::send(const std::string &message)
+void TcpConnection::shutdown()
 {
-    int n = 0;
-    int sockFd = mPtrChannel->getSocketFd();
-    if(mOutBuffer.readableBytes() == 0)
-    {
-        n = writen(sockFd, message.c_str(), message.size());
-        if(n < 0)
-            std::cout << "write error" << std::endl;
-        if(n == static_cast<int>(message.size())) // 写完调用用户写回调
-            mLoop->queueLoop(std::bind(&TcpConnection::userWriteCallback, this));
-    }
-
-    if( n < static_cast<int>(message.size()))
-    {
-        mOutBuffer.append(message.substr(n, message.size()));
-        if(!mPtrChannel->isWriting())
-        {
-            mPtrChannel->enableWriting();
-        }
-    }
+    SocketUtils::shutdownWrite(mSocketFd);
 }
 
+void TcpConnection::close()
+{
+    std::cout << "TcpConnection::close()" << std::endl;
+    // 从Epoll中注销、删除
+    mPtrChannel->disableAll();
+    mPtrChannel->remove();
+    // 通知管理层删了与自己有关的东西
+    mCloseCallback(shared_from_this());
+}
 
 void TcpConnection::setCloseCallback(const TcpConnection::CloseCallback &cb)
 {
@@ -74,110 +72,141 @@ void TcpConnection::setCloseCallback(const TcpConnection::CloseCallback &cb)
 }
 
 
+void TcpConnection::setHolder(WPtrIHolder wPtrIHolder)
+{
+    mWPtrContext = std::move(wPtrIHolder);
+}
+
+TcpConnection::WPtrIHolder TcpConnection::getHolder()
+{
+    return mWPtrContext;
+}
+
+void TcpConnection::setConnectionCallback(const TcpConnection::ConnectionCallback &cb)
+{
+    mConnectionCallback = cb;
+}
+
+void TcpConnection::setMessageCallback(const TcpConnection::MessageCallback &cb)
+{
+    mMessageCallback = cb;
+}
+
+void TcpConnection::setWriteCompleteCallback(const TcpConnection::WriteCompleteCallback &cb)
+{
+    mWriteCompleteCallback = cb;
+}
+
+
+void TcpConnection::send(const std::string &message)
+{
+    std::cout << "TcpConnection::send()" << std::endl;
+//    int n = 0;
+//    int sockFd = mPtrChannel->getFd();
+////    if(mOutBuffer.readableBytes() == 0)
+////    {
+////        n = writen(sockFd, message.c_str(), message.size());
+////        if(n < 0)
+////            std::cout << "write error" << std::endl;
+////        if(n == static_cast<int>(message.size())) // 写完调用用户写回调
+////        {
+////            if(mWriteCompleteCallback != nullptr){
+////                mLoop->queueLoop(std::bind(&TcpConnection::mWriteCompleteCallback, shared_from_this()));
+////            }
+////
+////        }
+////
+////    }
+////
+//    if( n < static_cast<int>(message.size()))
+//    {
+//        mOutBuffer.append(message.substr(n, message.size()));
+//        if(!mPtrChannel->isWriting())
+//        {
+//            mPtrChannel->enableWriting();
+//        }
+//    }
+    mOutBuffer.append(message);
+    if(!mPtrChannel->isWriting())
+    {
+        mPtrChannel->enableWriting();
+    }
+}
+
 void TcpConnection::handleRead()
 {
-    int sockFd = mPtrChannel->getSocketFd();
-    if (sockFd < 0)
-    {
-        std::cout << "TcpConnection::handleRead sockFd < 0 error " << std::endl;
-        return;
-    }
-    const int READ_BUFF_MAX = 65536;
+    std::cout << "TcpConnection::handleRead()" << std::endl;
     char buff[READ_BUFF_MAX];
     bzero(buff, sizeof(buff));
+    int readLength = SocketUtils::readn(mSocketFd,buff,READ_BUFF_MAX);
 
-    int readLength = readn(sockFd, buff, READ_BUFF_MAX);
-
-    if (readLength < 0)
+    if (readLength < 0)        // 读出错
     {
-        std::cout << "TcpConnection::handleRead readlength < 0 error" << std::endl;
+        std::cout << "TcpConnection::handleRead(): readLength < 0" << std::endl;
     }
-    else if(readLength == 0)
+    else if(readLength == 0)   // 对端关闭
     {
+        std::cout << "TcpConnection::handleRead(): readLength == 0" <<std::endl;
         // 有请求出现但是读不到数据
         // 对端可能调用shutdown或close
         // 统一按照对端已经关闭处理
+        mTcpConnectionState = kStateDisconnecting;
         handleClose();
     }
-    else
+    else                         // 正常
     {
         std::string buffString(buff, readLength);
         mInBuffer.append(buffString);
-        userReadCallback(&mInBuffer); // 用户消息读取成功回调函数
+        // 用户消息读取成功回调函数
+        if (mMessageCallback != nullptr){
+            mMessageCallback(shared_from_this(), &mInBuffer);
+        }
     }
-
 }
 
 void TcpConnection::handleWrite()
 {
-    int sockFd = mPtrChannel->getSocketFd();
-    if (sockFd < 0)
-    {
-        std::cout << "TcpConnection::handleRead sockFd < 0 error " << std::endl;
-        return;
-    }
+    int sockFd = mPtrChannel->getFd();
+
     if(mPtrChannel->isWriting())
     {
-        int n = writen(sockFd, mOutBuffer.peek(), mOutBuffer.readableBytes());
-        if(n>0)
-        {
-            std::cout << "write " << n << " bytes data" << std::endl;
-        }
+        int n = SocketUtils::writen(sockFd, mOutBuffer.peek(), mOutBuffer.readableBytes());
         mOutBuffer.retrieve(n);
-        if(mOutBuffer.readableBytes() == 0)
+        if(mOutBuffer.readableBytes() == 0) // 写完了
         {
             mPtrChannel->disableWriting();
-            mLoop->queueLoop(std::bind(&TcpConnection::userWriteCallback, this)); // 用户消息写成功回调函数
+            if(mWriteCompleteCallback)
+            {
+                mWriteCompleteCallback(shared_from_this());
+            }
+            // 不再写了, 关闭写, 发送FIN
+            if(mTcpConnectionState == kStateDisconnecting){
+                std::cout << "kStateDisconnecting and TcpConnection::handleWrite()" << std::endl;
+                shutdown();
+            }
         }
     }
 }
-
 
 void TcpConnection::handleClose()
 {
-    std::cout << "close" << std::endl;
-    mPtrChannel->disableAll();
-    mPtrChannel->remove(); //从Epoll中注销
-    if(close(mSocketFd) < 0)
-    {
-        std::cout <<"close error" << std::endl;
-    }
-
-    //通知管理层删了与自己有关的东西
-    if(mCloseCallback){
-        mCloseCallback(std::shared_ptr<TcpConnection>(this));
-    }
+    close();
 }
 
-
-void TcpConnection::setUser(IUser *ptrUser)
+void TcpConnection::setState(TcpConnection::TcpConnectionState state)
 {
-    mPtrUser = ptrUser;
+    mTcpConnectionState = state;
 }
 
-
-void TcpConnection::userReadCallback(Buffer* pBuf){
-    if(mPtrUser != nullptr)
-    {
-        mPtrUser->onMessage(this, pBuf);
-    }
-}
-
-void TcpConnection::userWriteCallback()
+TcpConnection::TcpConnectionState TcpConnection::getState()
 {
-    if(mPtrUser != nullptr){
-        mPtrUser->onWriteComplete(this);
-    }
-
+    return mTcpConnectionState;
 }
 
-void TcpConnection::userConnectCallback()
+
+int TcpConnection::getSocketFd() const
 {
-    if(mPtrUser != nullptr)
-    {
-        mPtrUser->onConnection(this);
-    }
+        return mSocketFd;
 }
-
 
 
