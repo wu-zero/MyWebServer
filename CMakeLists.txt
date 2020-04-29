@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 11)
 include_directories(src/header)
 
 # 可执行文件
-add_executable(MyWebServer main.cpp MyServer.h MyServer.cpp HttpHandler.cpp HttpHandler.h)
+add_executable(MyWebServer main.cpp  HttpHandler.cpp HttpHandler.h HttpConnectionManager.h HttpConnectionManager.cpp)
 # 链接
 target_link_libraries(MyWebServer TcpServer)
 

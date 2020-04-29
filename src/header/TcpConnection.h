@@ -61,11 +61,15 @@ public:
     int getSocketFd() const;
     /// TcpConnection连接状态
     void setState(TcpConnectionState state);
+    void setStateInLoop(TcpConnectionState state);
     TcpConnectionState getState();
     /// TcpConnection的开始、shutdown和关闭
     void start(); // 建立连接时的操作：Channel、http
+    void startInLoop();
     void shutdown();
+    void shutdownInLoop();
     void close();
+    void closeInLoop();
 
     /// TcpConnection删除时, TcpServer回调
     void setCloseCallback(const CloseCallback &cb);
@@ -79,6 +83,7 @@ public:
     void setWriteCompleteCallback(const WriteCompleteCallback &cb);
     /// TcpConnection应用层发送消息
     void send(const std::string &message);
+    void sendInLoop(const std::string &message);
 private:
     /// 用于Channel的回调
     void handleRead();

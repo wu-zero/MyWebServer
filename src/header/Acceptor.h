@@ -25,7 +25,7 @@ private:
 private:
     EventLoop *mPtrLoop; // 所属EventLoop
     int mListenFd; // (服务器监听的socket)的文件描述符
-    SPtrChannel mPtrAcceptChannel; // 观察(服务器监听的socket)的Channel
+    SPtrChannel mSPtrAcceptChannel; // 观察(服务器监听的socket)的Channel
 
     NewConnectionCallback mNewConnectionCallback; // 新连接到来时的回调函数
 public:

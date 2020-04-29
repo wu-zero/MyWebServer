@@ -10,7 +10,7 @@
 #include <iostream>
 #include "EventLoop.h"
 #include "TcpServer.h"
-
+#include "ConnectionManager.h"
 
 using SPtrTcpConnection = std::shared_ptr<TcpConnection>;
 
@@ -23,7 +23,7 @@ static void onMessage(const SPtrTcpConnection &sPtrTcpConnection, Buffer *pBuf){
 int main()
 {
     EventLoop loop;
-    TcpServer myTcpServer(&loop);
+    TcpServer<> myTcpServer(&loop);
     myTcpServer.start();
     myTcpServer.setMessageCallback(onMessage);
     loop.loop();

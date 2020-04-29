@@ -20,7 +20,7 @@
 
 std::vector<std::string> HttpHandler::kMethodVector = {"GET", "POST", "Unknown"};
 std::vector<std::string> HttpHandler::kVersionVector = {"HTTP/1.0", "HTTP/1.1", "Unknown"};
-const int HttpHandler::kKeepAliveTime = 300;
+const int HttpHandler::kKeepAliveTime = 120;
 
 HttpHandler::HttpHandler()
         : mHttpState(kStart),

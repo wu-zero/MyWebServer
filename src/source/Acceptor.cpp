@@ -22,7 +22,7 @@
 Acceptor::Acceptor(EventLoop *loop)
     : mPtrLoop(loop),
       mListenFd(-1),
-      mPtrAcceptChannel(nullptr),
+      mSPtrAcceptChannel(nullptr),
       mNewConnectionCallback(nullptr)
 {
     mListenFd = SocketUtils::creatSocketAndListen(55555);
@@ -30,22 +30,22 @@ Acceptor::Acceptor(EventLoop *loop)
         std::cout << "creatSocketAndListen failed" << std::endl;
         abort();
     }
-    mPtrAcceptChannel = std::make_shared<Channel>(mPtrLoop, mListenFd);
+    mSPtrAcceptChannel = std::make_shared<Channel>(mPtrLoop, mListenFd);
     // 设置自己Channel的回调
-    mPtrAcceptChannel->setReadHandler(std::bind(&Acceptor::handleRead, this));
+    mSPtrAcceptChannel->setReadHandler(std::bind(&Acceptor::handleRead, this));
 }
 
 Acceptor::~Acceptor()
 {
-    mPtrAcceptChannel->disableAll(); // 关闭监听
-    mPtrAcceptChannel->remove(); // 从Epoll中删除
+    mSPtrAcceptChannel->disableAll(); // 关闭监听
+    mSPtrAcceptChannel->remove(); // 从Epoll中删除
     close(mListenFd);
 }
 
 void Acceptor::start()
 {
     std::cout << "Acceptor::start()" << std::endl;
-    mPtrAcceptChannel->enableReading();
+    mSPtrAcceptChannel->enableReading();
 }
 
 void Acceptor::setNewConnectionCallback(const Acceptor::NewConnectionCallback &cb)

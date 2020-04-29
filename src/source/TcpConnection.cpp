@@ -13,6 +13,7 @@
 #include <iostream>
 #include <cstring>
 #include <utility>
+#include <assert.h>
 
 #include "Channel.h"
 #include "EventLoop.h"
@@ -42,29 +43,45 @@ TcpConnection::TcpConnection(EventLoop *eventLoop, int socketFd)
 TcpConnection::~TcpConnection()
 {
     std::cout << "TcpConnection::~TcpConnection()" <<std::endl;
+    assert(mTcpConnectionState == kStateDisconnected);
     // 关闭socket
     SocketUtils::close(mSocketFd);
 }
 
 void TcpConnection::start()
 {
+    mLoop->runInLoop(std::bind(&TcpConnection::startInLoop,this));
+}
+
+void TcpConnection::startInLoop() {
+    mLoop->assertInLoopThread();
     mPtrChannel->enableReading();
 }
 
 void TcpConnection::shutdown()
 {
+    mLoop->runInLoop(std::bind(&TcpConnection::shutdownInLoop,this));
+}
+
+void TcpConnection::shutdownInLoop() {
+    mLoop->assertInLoopThread();
     SocketUtils::shutdownWrite(mSocketFd);
 }
 
-void TcpConnection::close()
-{
-    std::cout << "TcpConnection::close()" << std::endl;
-    // 从Epoll中注销、删除
-    mPtrChannel->disableAll();
-    mPtrChannel->remove();
-    // 通知管理层删了与自己有关的东西
-    mCloseCallback(shared_from_this());
+void TcpConnection::close(){
+    if (mTcpConnectionState == kStateConnected || mTcpConnectionState == kStateDisconnecting) {
+        setStateInLoop(kStateDisconnecting);
+        mLoop->runInLoop(std::bind(&TcpConnection::closeInLoop, shared_from_this()));
+    }
+ }
+
+void TcpConnection::closeInLoop() {
+    if (mTcpConnectionState == kStateConnected || mTcpConnectionState == kStateDisconnecting) {
+        setStateInLoop(kStateDisconnecting);
+        handleClose();
+    }
 }
+
 
 void TcpConnection::setCloseCallback(const TcpConnection::CloseCallback &cb)
 {
@@ -101,31 +118,17 @@ void TcpConnection::setWriteCompleteCallback(const TcpConnection::WriteCompleteC
 void TcpConnection::send(const std::string &message)
 {
     std::cout << "TcpConnection::send()" << std::endl;
-//    int n = 0;
-//    int sockFd = mPtrChannel->getFd();
-////    if(mOutBuffer.readableBytes() == 0)
-////    {
-////        n = writen(sockFd, message.c_str(), message.size());
-////        if(n < 0)
-////            std::cout << "write error" << std::endl;
-////        if(n == static_cast<int>(message.size())) // 写完调用用户写回调
-////        {
-////            if(mWriteCompleteCallback != nullptr){
-////                mLoop->queueLoop(std::bind(&TcpConnection::mWriteCompleteCallback, shared_from_this()));
-////            }
-////
-////        }
-////
-////    }
-////
-//    if( n < static_cast<int>(message.size()))
-//    {
-//        mOutBuffer.append(message.substr(n, message.size()));
-//        if(!mPtrChannel->isWriting())
-//        {
-//            mPtrChannel->enableWriting();
-//        }
-//    }
+    if(mTcpConnectionState == kStateConnected){
+        if(mLoop->isInLoopThread()){
+            sendInLoop(message);
+        }
+        else{
+            mLoop->runInLoop(std::bind(&TcpConnection::sendInLoop, shared_from_this(), message));
+        }
+    }
+}
+void TcpConnection::sendInLoop(const std::string &message) {
+    assert(mLoop->isInLoopThread());
     mOutBuffer.append(message);
     if(!mPtrChannel->isWriting())
     {
@@ -133,8 +136,10 @@ void TcpConnection::send(const std::string &message)
     }
 }
 
+
 void TcpConnection::handleRead()
 {
+    mLoop->assertInLoopThread();
     std::cout << "TcpConnection::handleRead()" << std::endl;
     char buff[READ_BUFF_MAX];
     bzero(buff, sizeof(buff));
@@ -166,6 +171,7 @@ void TcpConnection::handleRead()
 
 void TcpConnection::handleWrite()
 {
+    mLoop->assertInLoopThread();
     int sockFd = mPtrChannel->getFd();
 
     if(mPtrChannel->isWriting())
@@ -177,7 +183,7 @@ void TcpConnection::handleWrite()
             mPtrChannel->disableWriting();
             if(mWriteCompleteCallback)
             {
-                mWriteCompleteCallback(shared_from_this());
+                mLoop->runInLoop(std::bind(mWriteCompleteCallback, shared_from_this()));
             }
             // 不再写了, 关闭写, 发送FIN
             if(mTcpConnectionState == kStateDisconnecting){
@@ -190,14 +196,26 @@ void TcpConnection::handleWrite()
 
 void TcpConnection::handleClose()
 {
-    close();
+    mLoop->assertInLoopThread();
+    std::cout << "TcpConnection::close()" << std::endl;
+    assert(mTcpConnectionState == kStateConnected || kStateDisconnecting);
+    setStateInLoop(kStateDisconnected);
+    // 从Epoll中注销、删除
+    mPtrChannel->disableAll();
+    mPtrChannel->remove();
+    // 通知管理层删了与自己有关的东西
+    mCloseCallback(shared_from_this());
 }
 
 void TcpConnection::setState(TcpConnection::TcpConnectionState state)
 {
-    mTcpConnectionState = state;
+    mLoop->runInLoop(std::bind(&TcpConnection::setStateInLoop, this, state));
 }
 
+void TcpConnection::setStateInLoop(TcpConnection::TcpConnectionState state) {
+    mLoop->assertInLoopThread();
+    mTcpConnectionState = state;
+}
 TcpConnection::TcpConnectionState TcpConnection::getState()
 {
     return mTcpConnectionState;
@@ -208,5 +226,11 @@ int TcpConnection::getSocketFd() const
 {
         return mSocketFd;
 }
+
+
+
+
+
+
 
 

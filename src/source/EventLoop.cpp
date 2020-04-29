@@ -12,35 +12,51 @@
 #include <sys/eventfd.h>
 #include "zconf.h"
 #include <unistd.h>
+#include <assert.h>
 
 #include "Epoll.h"
 #include "Channel.h"
 #include "Timer.h"
 
 EventLoop::EventLoop()
-        : mIsQuit(false),
-          mEpoll(new Epoll()),
+        : mIsLooping(false),
+          mIsQuit(false),
+          mSPtrEpoll(new Epoll()),
           mWakeUpEventFd(createEventFd()),
-          mWakeUpChannel(new Channel(this, mWakeUpEventFd)),
+          mSPtrWakeUpChannel(new Channel(this, mWakeUpEventFd)),
           mPendingFunctors(),
-          mTimerManager(new TimerManager(this))
+          mSPtrTimerManager(new TimerManager(this)),
+          mTid(std::this_thread::get_id())
 {
-    mWakeUpChannel->setReadHandler(std::bind(&EventLoop::handleRead, this));
-    mWakeUpChannel->enableReading();
+    mSPtrWakeUpChannel->setReadHandler(std::bind(&EventLoop::handleRead, this));
+    mSPtrWakeUpChannel->enableReading();
 }
 
 EventLoop::~EventLoop()
 {
+    mSPtrWakeUpChannel->disableAll(); // 关闭监听
+    mSPtrWakeUpChannel->remove(); // 从Epoll中删除
     close(mWakeUpEventFd);
+}
+
+void EventLoop::quit() {
+    std::cout << "EventLoop::quit()" << std::endl;
+    mIsQuit = true;
+    if(!isInLoopThread()){
+        wakeup();
+    }
 }
 
 void EventLoop::loop()
 {
-    mIsQuit = false;
+    assert(!mIsLooping);
+    assert(isInLoopThread());
+    mIsLooping = true;
+    std::vector<Channel *> retChannels;
     while (!mIsQuit)
     {
-        std::vector<Channel *> retChannels;
-        mEpoll->poll(retChannels);
+        retChannels.clear();
+        mSPtrEpoll->poll(retChannels);
         std::vector<Channel *>::iterator it;
         for (it = retChannels.begin(); it != retChannels.end(); ++it)
         {
@@ -48,51 +64,37 @@ void EventLoop::loop()
         }
         doPendingFunctors();
     }
+    std::cout << "EventLoop::loop() stop" <<std::endl;
+    mIsLooping = false;
 }
 
 void EventLoop::updateChannel(Channel *channel)
 {
-    mEpoll->updateChannel(channel);
+    mSPtrEpoll->updateChannel(channel);
 }
+
 void EventLoop::removeChannel(Channel *channel){
-    mEpoll->removeChannel(channel);
+    mSPtrEpoll->removeChannel(channel);
 }
 
-void EventLoop::queueLoop(const Functor &functor)
-{
-    mPendingFunctors.push_back(functor);
-    wakeup();
-}
-
-// 往 mWakeUpEventFd 写入一个字节的数据，唤醒 IO 线程
-void EventLoop::wakeup()
-{
-    uint64_t one = 1;
-    ssize_t n = write(mWakeUpEventFd, &one, sizeof one);
-    if (n != sizeof(one))
-    {
-        std::cout << "EventLoop::wakeup() writes " << n << " bytes instead of 8" << std::endl;
-    }
-}
-
-void EventLoop::handleRead()
-{
-    uint64_t one = 1;
-    ssize_t n = read(mWakeUpEventFd, &one, sizeof one);
-    if (n != sizeof(one))
-    {
-        std::cout << "EventEventLoop::handleRead() reads " << n << " bytes instead of 8" << std::endl;
-    }
-}
-
-void EventLoop::doPendingFunctors()
-{
-    std::vector<Functor> tempFunctors;
-    tempFunctors.swap(mPendingFunctors);
-    for (const auto &functor: tempFunctors)
-    {
+void EventLoop::runInLoop(EventLoop::Functor &&functor) {
+    if(isInLoopThread())
         functor();
+    else{
+        queueLoop(std::move(functor));
     }
+}
+
+std::thread::id EventLoop::getThreadId() {
+    return mTid;
+}
+
+bool EventLoop::isInLoopThread() const {
+    return mTid == std::this_thread::get_id();
+}
+
+void EventLoop::assertInLoopThread() {
+    assert(isInLoopThread());
 }
 
 
@@ -106,5 +108,59 @@ int EventLoop::createEventFd()
     }
     return eventFd;
 }
+
+// 往 mWakeUpEventFd 写入一个字节的数据，唤醒线程
+void EventLoop::wakeup()
+{
+    uint64_t one = 1;
+    ssize_t n = write(mWakeUpEventFd, &one, sizeof(one));
+    if (n != sizeof(one))
+    {
+        std::cout << "EventLoop::wakeup() writes " << n << " bytes instead of 8" << std::endl;
+    }
+}
+
+void EventLoop::queueLoop(Functor &&functor)
+{
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        mPendingFunctors.emplace_back(std::move(functor));
+    }
+    if(!isInLoopThread())
+        wakeup();
+}
+
+void EventLoop::doPendingFunctors()
+{
+    std::vector<Functor> tempFunctors;
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        tempFunctors.swap(mPendingFunctors);
+    }
+    for (const auto &functor: tempFunctors)
+    {
+        functor();
+    }
+}
+
+void EventLoop::handleRead()
+{
+    uint64_t one = 1;
+    ssize_t n = read(mWakeUpEventFd, &one, sizeof one);
+    if (n != sizeof(one))
+    {
+        std::cout << "EventEventLoop::handleRead() reads " << n << " bytes instead of 8" << std::endl;
+    }
+}
+
+
+
+
+
+
+
+
+
+
 
 
