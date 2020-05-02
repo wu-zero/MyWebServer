@@ -35,7 +35,9 @@
 ### 2020.04.28
 第四个版本，实现了如下图所示的多线程Reactor并发模型版本，每个Reactor都属于独立的线程，其中MainReactor负责accept，并将连接分发给SubReactor，该连接之后的所有操作都由该SubReactor负责。  
 多线程下为了便于线程安全的实现，将TcpServer更改为模板，模板的类型参数为Manager类，这样，Manager类实现不同的功能，相应TcpServer类就实现不同的功能，每个SubReactor里有一个Manager实例，该实例负责该SubReactor(即该线程)中Connection的管理。  
-![](https://github.com/wu-zero/MyWebServer/raw/master/doc/pics/%E5%B9%B6%E5%8F%91%E6%A8%A1%E5%9E%8B%E7%A4%BA%E6%84%8F%E5%9B%BE.jpg)
+  
+<div align=center><img width="500"  src="https://github.com/wu-zero/MyWebServer/raw/master/doc/pics/%E5%B9%B6%E5%8F%91%E6%A8%A1%E5%9E%8B%E7%A4%BA%E6%84%8F%E5%9B%BE.jpg"/></div>  
+
 **学到了:**  
 * 利用std::thread、std::mutex、std::condition_variable等实现多线程编程，线程池的实现以及维护线程间共享数据的线程安全。  
 * TcpServer利用类模板实现Http相关功能，模板的类型参数为Manager类或者Manager的派生类，TcpServer类内线程池的每个线程都对应一个Manager示例。最初设计考虑传入ManagerCreate函数实现工厂模式，感觉不优雅，最后选择用类模板实现。  
