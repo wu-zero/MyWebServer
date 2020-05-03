@@ -171,12 +171,12 @@ HttpHandler::StringPos HttpHandler::parseUrl(std::string &buf, HttpHandler::Stri
     /// 3 根据HttpVersion设置是否长连接
     if (mHttpVersion == kVersion11)
     {
-        //TODO
+        mIsKeepAlive = true;
     }
 
-    std::cout << "method: " << kMethodVector[mHttpMethod] << std::ends
-              << "path: " << mHttpPath << std::ends
-              << "version: " << kVersionVector[mHttpVersion] << std::endl;
+//    std::cout << "method: " << kMethodVector[mHttpMethod] << std::ends
+//              << "path: " << mHttpPath << std::ends
+//              << "version: " << kVersionVector[mHttpVersion] << std::endl;
     return endPos + 2;
 }
 
@@ -206,7 +206,7 @@ HttpHandler::StringPos HttpHandler::parseHeader(std::string &buf, HttpHandler::S
         if(mHeader["Connection"] == "keep-alive" || mHeader["Connection"] == "Keep-Alive"){
             mIsKeepAlive = true;
         }
-        else{
+        else if(mHeader["Connection"] == "close" || mHeader["Connection"] == "Close"){
             mIsKeepAlive = false;
         }
     }

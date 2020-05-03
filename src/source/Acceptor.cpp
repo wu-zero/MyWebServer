@@ -55,7 +55,7 @@ void Acceptor::setNewConnectionCallback(const Acceptor::NewConnectionCallback &c
 
 void Acceptor::handleRead()
 {
-    std::cout << "Acceptor::handleRead()" << std::endl;
+//    std::cout << "Acceptor::handleRead()" << std::endl;
     int connFd = SocketUtils::creatNewAccept(mListenFd);
     if (connFd > 0){
         // 执行新连接到来时的回调

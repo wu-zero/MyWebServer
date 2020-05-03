@@ -25,6 +25,7 @@ HttpConnectionManager::HttpConnectionManager(EventLoop *loop)
         : ConnectionManager(loop),
           mTimerManager(mLoop)
 {
+    // 设置循环定时器
     mTimerManager.addTimer(std::bind(&HttpConnectionManager::handleExpireEvent, this), kKeepAliveTime, kExpireEventCircleInterval);
 }
 
@@ -41,7 +42,7 @@ void HttpConnectionManager::addConnectionInLoop(const ConnectionManager::SPtrCon
     ConnectionManager::addConnectionInLoop(sPtrTcpConnection);
     // 当前类相关
     sPtrTcpConnection->setMessageCallback(std::bind(&HttpConnectionManager::onMessage, this, std::placeholders::_1, std::placeholders::_2));
-    sPtrTcpConnection->setWriteCompleteCallback(std::bind(&HttpConnectionManager::onWriteComplete, this, std::placeholders::_1));
+    //sPtrTcpConnection->setWriteCompleteCallback(std::bind(&HttpConnectionManager::onWriteComplete, this, std::placeholders::_1));
 
     SPtrHttpConnection newHttpConnection = std::make_shared<HttpHandler>();
 
@@ -49,12 +50,12 @@ void HttpConnectionManager::addConnectionInLoop(const ConnectionManager::SPtrCon
     newHttpConnection->setTcpConnection(sPtrTcpConnection); // 弱
 
     mTimerNodeList.emplace_back(newHttpConnection, Timer::now() + kKeepAliveTime);
-    std::cout << "onConnection: " << Timer::now() << std::endl;
+////    std::cout << "onConnection: " << Timer::now() << std::endl;
     mTimerNodeMap[newHttpConnection] = --mTimerNodeList.end();
 }
 
 void HttpConnectionManager::deleteConnection(const ConnectionManager::SPtrConnection &sPtrConnection) {
-    deleteConnectionInLoop(sPtrConnection);
+    mLoop->runInLoop(std::bind(&HttpConnectionManager::deleteConnectionInLoop, this, sPtrConnection));
 }
 
 void HttpConnectionManager::deleteConnectionInLoop(const ConnectionManager::SPtrConnection &sPtrConnection) {
@@ -64,7 +65,7 @@ void HttpConnectionManager::deleteConnectionInLoop(const ConnectionManager::SPtr
 void HttpConnectionManager::onMessage(const HttpConnectionManager::SPtrTcpConnection &sPtrTcpConnection, Buffer *pBuf)
 {
     mLoop->assertInLoopThread();
-    std::cout << "onMessage" << std::endl;
+//    std::cout << "onMessage" << std::endl;
     WPtrIContext iContext = sPtrTcpConnection->getHolder();
     if (iContext.expired())
     {   return;
@@ -82,7 +83,7 @@ void HttpConnectionManager::onMessage(const HttpConnectionManager::SPtrTcpConnec
 void HttpConnectionManager::onWriteComplete(const HttpConnectionManager::SPtrTcpConnection &sPtrTcpConnection)
 {
     mLoop->assertInLoopThread();
-    std::cout << "onWriteComplete" << std::endl;
+//    std::cout << "onWriteComplete" << std::endl;
 }
 
 void HttpConnectionManager::updateKeepAlive(const HttpConnectionManager::SPtrHttpConnection &sPtrHttpConnection)
@@ -98,12 +99,12 @@ void HttpConnectionManager::updateKeepAlive(const HttpConnectionManager::SPtrHtt
     // 处理http对应的tcp的连接
     if (!sPtrHttpConnection->isKeepAlive())                   // 如果http不是长连接
     {
-        std::cout << "!sPtrHttpConnection->isKeepAlive()" << std::endl;
+//        std::cout << "!sPtrHttpConnection->isKeepAlive()" << std::endl;
         sPtrTcpConnection->setState(TcpConnection::kStateDisconnecting);
         return;
     } else                                                    // 如果http是长连接
     {
-        std::cout << "sPtrHttpConnection->isKeepAlive()" << std::endl;
+//        std::cout << "sPtrHttpConnection->isKeepAlive()" << std::endl;
 
         // 如果有当前http对应的时间节点， list、map里删除
         if (mTimerNodeMap.count(sPtrHttpConnection))
@@ -116,8 +117,9 @@ void HttpConnectionManager::updateKeepAlive(const HttpConnectionManager::SPtrHtt
         // 新建时间节点
         Timer::TimeStampType now = Timer::now();
         mTimerNodeList.emplace_back(sPtrHttpConnection, now + kKeepAliveTime);
-        std::cout << "updateKeepAlive: " << now + kKeepAliveTime << std::endl;
+//        std::cout << "updateKeepAlive: " << now + kKeepAliveTime << std::endl;
         mTimerNodeMap[sPtrHttpConnection] = --mTimerNodeList.end();
+        return;
     }
 }
 

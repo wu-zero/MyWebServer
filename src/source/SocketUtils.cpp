@@ -46,11 +46,11 @@ int SocketUtils::creatNewAccept(int listenFd){
     }
     else
     {
-        std::cout << "CreatNewAccept from "
-                  << "[" << inet_ntoa(client_addr.sin_addr)
-                  << ":" << ntohs(client_addr.sin_port) << "]   "
-                  << "New socket fd: " << connFd
-                  << std::endl;
+//        std::cout << "CreatNewAccept from "
+//                  << "[" << inet_ntoa(client_addr.sin_addr)
+//                  << ":" << ntohs(client_addr.sin_port) << "]   "
+//                  << "New socket fd: " << connFd
+//                  << std::endl;
     }
 
     return connFd;

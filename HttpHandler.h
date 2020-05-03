@@ -19,7 +19,7 @@
 #include "IHolder.h"
 #include "TcpConnection.h"
 
-class HttpHandler: public IHolder, std::enable_shared_from_this<HttpHandler>
+class HttpHandler: public IHolder
 
 {
 public:

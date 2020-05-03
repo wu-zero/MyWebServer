@@ -82,6 +82,7 @@ void Epoll::updateChannel(Channel *channel)
 
 void Epoll::removeChannel(Channel *channel)
 {
+    channel->setStatus(Channel::kChannelStatuesDeleted);
     struct epoll_event event{};
     event.data.ptr = channel;
     event.events = channel->getEvents();

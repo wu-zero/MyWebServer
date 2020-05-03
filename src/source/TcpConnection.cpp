@@ -42,7 +42,7 @@ TcpConnection::TcpConnection(EventLoop *eventLoop, int socketFd)
 
 TcpConnection::~TcpConnection()
 {
-    std::cout << "TcpConnection::~TcpConnection()" <<std::endl;
+//    std::cout << "TcpConnection::~TcpConnection()" <<std::endl;
     assert(mTcpConnectionState == kStateDisconnected);
     // 关闭socket
     SocketUtils::close(mSocketFd);
@@ -50,7 +50,7 @@ TcpConnection::~TcpConnection()
 
 void TcpConnection::start()
 {
-    mLoop->runInLoop(std::bind(&TcpConnection::startInLoop,this));
+    mLoop->runInLoop(std::bind(&TcpConnection::startInLoop,shared_from_this()));
 }
 
 void TcpConnection::startInLoop() {
@@ -60,12 +60,13 @@ void TcpConnection::startInLoop() {
 
 void TcpConnection::shutdown()
 {
-    mLoop->runInLoop(std::bind(&TcpConnection::shutdownInLoop,this));
+    mLoop->runInLoop(std::bind(&TcpConnection::shutdownInLoop,shared_from_this()));
 }
 
 void TcpConnection::shutdownInLoop() {
     mLoop->assertInLoopThread();
-    SocketUtils::shutdownWrite(mSocketFd);
+    mPtrChannel->disableWriting();
+    SocketUtils::shutdownWrite(mSocketFd); // 关闭写
 }
 
 void TcpConnection::close(){
@@ -117,8 +118,8 @@ void TcpConnection::setWriteCompleteCallback(const TcpConnection::WriteCompleteC
 
 void TcpConnection::send(const std::string &message)
 {
-    std::cout << "TcpConnection::send()" << std::endl;
-    if(mTcpConnectionState == kStateConnected){
+//    std::cout << "TcpConnection::send()" << std::endl;
+    if(mTcpConnectionState == kStateConnected||mTcpConnectionState == kStateDisconnecting){
         if(mLoop->isInLoopThread()){
             sendInLoop(message);
         }
@@ -140,23 +141,24 @@ void TcpConnection::sendInLoop(const std::string &message) {
 void TcpConnection::handleRead()
 {
     mLoop->assertInLoopThread();
-    std::cout << "TcpConnection::handleRead()" << std::endl;
+//    std::cout << "TcpConnection::handleRead()" << std::endl;
     char buff[READ_BUFF_MAX];
     bzero(buff, sizeof(buff));
     int readLength = SocketUtils::readn(mSocketFd,buff,READ_BUFF_MAX);
 
     if (readLength < 0)        // 读出错
     {
-        std::cout << "TcpConnection::handleRead(): readLength < 0" << std::endl;
+//        std::cout << "TcpConnection::handleRead(): readLength < 0" << std::endl;
     }
     else if(readLength == 0)   // 对端关闭
     {
-        std::cout << "TcpConnection::handleRead(): readLength == 0" <<std::endl;
+//        std::cout << "TcpConnection::handleRead(): readLength == 0" <<std::endl;
         // 有请求出现但是读不到数据
         // 对端可能调用shutdown或close
         // 统一按照对端已经关闭处理
         mTcpConnectionState = kStateDisconnecting;
-        handleClose();
+//            std::cout << "对端关闭handleClose" << mSocketFd<< std::endl;
+        close();
     }
     else                         // 正常
     {
@@ -181,14 +183,15 @@ void TcpConnection::handleWrite()
         if(mOutBuffer.readableBytes() == 0) // 写完了
         {
             mPtrChannel->disableWriting();
-            if(mWriteCompleteCallback)
-            {
-                mLoop->runInLoop(std::bind(mWriteCompleteCallback, shared_from_this()));
-            }
+//            if(mWriteCompleteCallback)
+//            {
+//                mLoop->runInLoop(std::bind(mWriteCompleteCallback, shared_from_this()));
+//            }
             // 不再写了, 关闭写, 发送FIN
             if(mTcpConnectionState == kStateDisconnecting){
-                std::cout << "kStateDisconnecting and TcpConnection::handleWrite()" << std::endl;
+//                std::cout << "kStateDisconnecting and TcpConnection::handleWrite()" << std::endl;
                 shutdown();
+                //mLoop->runInLoop(std::bind(&TcpConnection::handleClose, shared_from_this()));
             }
         }
     }
@@ -197,19 +200,22 @@ void TcpConnection::handleWrite()
 void TcpConnection::handleClose()
 {
     mLoop->assertInLoopThread();
-    std::cout << "TcpConnection::close()" << std::endl;
+//    std::cout << "handleClose" << mSocketFd<< std::endl;
+//    std::cout << "TcpConnection::close()" << std::endl;
     assert(mTcpConnectionState == kStateConnected || kStateDisconnecting);
     setStateInLoop(kStateDisconnected);
     // 从Epoll中注销、删除
     mPtrChannel->disableAll();
+    //mLoop->removeChannel(mPtrChannel.get());
     mPtrChannel->remove();
     // 通知管理层删了与自己有关的东西
+
     mCloseCallback(shared_from_this());
 }
 
 void TcpConnection::setState(TcpConnection::TcpConnectionState state)
 {
-    mLoop->runInLoop(std::bind(&TcpConnection::setStateInLoop, this, state));
+    mLoop->runInLoop(std::bind(&TcpConnection::setStateInLoop, shared_from_this(), state));
 }
 
 void TcpConnection::setStateInLoop(TcpConnection::TcpConnectionState state) {

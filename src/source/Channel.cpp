@@ -104,9 +104,6 @@ void Channel::setRevents(__uint32_t revents)
 //处理回调
 void Channel::handleEvent()
 {
-    if (mRevents != 1){
-        std::cout << "Channel::handleEvent(): " << mRevents<<std::endl;
-    }
     // 处理断开事件
     if ((mRevents & EPOLLHUP) && !(mRevents & EPOLLIN))
     {
@@ -129,6 +126,7 @@ void Channel::handleEvent()
     {
         if (mWriteHandler)
         {
+            std::cout << "mWriteHandler" << mFd<< std::endl;
             mWriteHandler();
         }
     }
