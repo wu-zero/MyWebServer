@@ -126,7 +126,7 @@ void Channel::handleEvent()
     {
         if (mWriteHandler)
         {
-            std::cout << "mWriteHandler" << mFd<< std::endl;
+            //std::cout << "mWriteHandler" << mFd<< std::endl;
             mWriteHandler();
         }
     }

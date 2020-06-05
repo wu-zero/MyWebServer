@@ -60,7 +60,7 @@ private:
 private:
     int mTimerFd;
     SPtrChannel mTimerFdChannel;
-    std::priority_queue<SPtrTimer, std::deque<SPtrTimer>, TimerCmp> mTimerQueue;
+    std::priority_queue<SPtrTimer, std::vector<SPtrTimer>, TimerCmp> mTimerQueue;
 public:
     explicit TimerManager(EventLoop* loop);
     ~TimerManager();
